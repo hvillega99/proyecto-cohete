@@ -1,0 +1,3 @@
+monitor: monitor.c
+	gcc -o monitor monitor.c 
+
