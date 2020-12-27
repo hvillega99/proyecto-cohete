@@ -11,17 +11,24 @@
 #include <pthread.h>
 #include <errno.h>
 #include <limits.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 
-#define MAXLINE 1024
+#define SHMSZ     4
+#define NUM     5
+#define SHM_ADDR  233
 
+int *param[NUM], *distancia, *nivel, *giro1, *giro2, *alarma;
+int shmid[NUM];
+
+int inicializar_memoria_compartida(void);
 int open_listenfd(char *port);
 void* thread_monitor(void* arg);
 void atender_cliente(int connfd);
 void connection_error(int connfd);
 
-int main(int argc, char **argv)
-{
-
+int main(int argc, char **argv){
+    
 	//Sockets
 	int listenfd;
 	unsigned int clientlen;
@@ -43,6 +50,9 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+    //Accede a la memoria compartida
+    if (inicializar_memoria_compartida()==-1) return 1;
+
 	//Abre un socket de escucha en port
 	listenfd = open_listenfd(port);
 
@@ -61,14 +71,9 @@ int main(int argc, char **argv)
 		haddrp = inet_ntoa(clientaddr.sin_addr);
 
 		printf("server conectado a %s (%s)\n", hp->h_name, haddrp);
-		//atender_cliente(connfd);
-
+		
         pthread_t tid;
         pthread_create(&tid, NULL, &thread_monitor, (void*)&connfd);
-
-		//printf("server desconectando a %s (%s)\n", hp->h_name, haddrp);
-
-		//close(connfd);
 	}
 }
 
@@ -117,35 +122,28 @@ void* thread_monitor(void* arg){
     
     int* connfd = (int*)arg;
     atender_cliente(*connfd);
+    printf("Cliente desconectado...\n");
     close(*connfd);
 
 }
 
-void atender_cliente(int connfd)
-{	
+void atender_cliente(int connfd){	
 
 	int n;
-    char buf[MAXLINE] = {0};
- 
-    while(1){
-    	n = read(connfd, buf, MAXLINE);
-        if(n <= 0)
-        	return;
+    int values[NUM];
+    while(1){ //escribo datos en el socket
+        values[0] = *distancia;
+        values[1] = *nivel;
+        values[2] = *giro1;
+        values[3] = *giro2;
+        values[4] = *alarma;
 
-        printf("Recibido: %s", buf);
-
-        //Detecta "CHAO" y se desconecta del cliente
-        if(strcmp(buf, "CHAO\n") == 0){
-            write(connfd, "BYE\n", 4);
-            return;
-        }
-
-        n = write(connfd, "Recibido\n", 10);
-        if(n <= 0)
-        	return;
-
-        memset(buf, 0, MAXLINE); //Encera el buffer
-	}
+       for(int i=0;i<5;i++){
+          n = write(connfd, &values[i], sizeof(int));
+          if(n <= 0)
+        	return;  
+       }  
+    }
 }
 
 void connection_error(int connfd)
@@ -153,4 +151,27 @@ void connection_error(int connfd)
 	fprintf(stderr, "Error de conexión: %s\n", strerror(errno));
 	close(connfd);
 	exit(-1);
+}
+
+int inicializar_memoria_compartida(void){
+    int i;
+
+    for (i=0;i<NUM;i++){
+        if ((shmid[i] = shmget(SHM_ADDR+i, SHMSZ, 0666)) < 0) { 
+            perror("shmget");
+            return(-1);
+        }
+        if ((param[i] = shmat(shmid[i], NULL, 0)) == (int *) -1) {
+            perror("shmat");
+            return(-1);
+        }
+    }
+  
+    distancia=param[0];
+    nivel=param[1];
+    giro1=param[2];
+    giro2=param[3];
+    alarma=param[4];
+
+    return(1);
 }

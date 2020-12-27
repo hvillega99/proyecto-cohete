@@ -12,27 +12,24 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <time.h>
 
-#define MAXLINE 1024
+//Socket
+int clientfd;
 
 int open_clientfd(char *hostname, char *port);
 void connection_error(int connfd);
+void catch();
 
 int main(int argc, char **argv)
 {
-	int opt;
+	int *values;
+	ssize_t n;
 
-	//Socket
-	int clientfd;
 	//Direcciones y puertos
 	char *hostname, *port;
 
-	//Lectura desde consola
-	char *linea_consola;
-	char read_buffer[MAXLINE] = {0};
-	size_t max = MAXLINE;
-	ssize_t n, l = 0;
-	
 	if(argc != 3){
 		fprintf(stderr, "uso: %s <IP> <Puerto TCP>\n", argv[0]);
 		return 1;
@@ -55,34 +52,19 @@ int main(int argc, char **argv)
 	if(clientfd < 0)
 		connection_error(clientfd);
 
-	printf("Conectado exitosamente a %s en el puerto %s.\n", hostname, port);
+	printf("Conectado exitosamente a %s en el puerto %s.\nPresione ctrl + c para finalizar\n", hostname, port);
 
+	signal(SIGINT, &catch);
 
-	linea_consola = (char *) calloc(1, MAXLINE);
-	printf("Ingrese texto para enviar al servidor, escriba CHAO para terminar...\n");
-	printf("> ");
-	l = getline(&linea_consola, &max, stdin); //lee desde consola
-	while(l > 0){
-		n = write(clientfd, linea_consola, l); //Envia al servidor
-		if(n<=0)
-			break;
-
-		n = read(clientfd, read_buffer, MAXLINE); //Lee respuesta del servidor
-		if(n<=0)
-			break;
-
-		printf("%s", read_buffer);
-		memset(read_buffer,0,MAXLINE); //Encerar el buffer
-
-		//Volver a leer desde consola
-		printf("> ");
-		l = getline(&linea_consola, &max, stdin);
+	int pointer[] = {0,0,0,0,0};
+	while(1){
+	
+		for(int i=0;i<5;i++){
+			read(clientfd, &pointer[i], sizeof(int)); //Lee respuesta del servidor
+		}
+		printf("distancia: %d; combustible: %d; giro1: %d; giro2: %d; alarma: %d\n",pointer[0],pointer[1],pointer[2],pointer[3],pointer[4]);
+		
 	}
-
-
-	printf("Desconectando...\n");
-	free(linea_consola);
-	close(clientfd);
 
 	return 0;
 }
@@ -118,4 +100,10 @@ void connection_error(int connfd)
 	fprintf(stderr, "Error de conexión: %s\n", strerror(errno));
 	close(connfd);
 	exit(-1);
+}
+
+void catch(){
+	close(clientfd);
+	printf("\nDesconectando...\n");
+	exit(0);
 }
