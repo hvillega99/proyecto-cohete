@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <time.h>
+#include <string.h>
 
 //Socket
 int clientfd;
@@ -56,14 +57,76 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, &catch);
 
+	char alarma[32] = {0}, accion[50] = {0}, inclinacionX[52] = {0}, 
+	inclinacionY[52] = {0}, distancia[16] = {0};
 	int pointer[] = {0,0,0,0,0};
+
 	while(1){
 	
 		for(int i=0;i<5;i++){
 			read(clientfd, &pointer[i], sizeof(int)); //Lee respuesta del servidor
+			
 		}
-		printf("distancia: %d; combustible: %d; giro1: %d; giro2: %d; alarma: %d\n",pointer[0],pointer[1],pointer[2],pointer[3],pointer[4]);
 		
+		switch (pointer[4])
+		{
+		case 101:
+			strcpy(alarma,"Fallo general");
+			strcpy(accion,": Reiniciando propulsores");
+			//*alarma = "Fallo general";
+			//*accion = ": Reiniciando propulsores";
+			break;
+		
+		case 102:
+			strcpy(alarma,"Fallo de motor principal");
+			strcpy(accion,": Reiniciando propulsor principal");
+			//*alarma = "Fallo de motor principal";
+			//*accion = ": Reiniciando propulsor principal";
+			break;
+
+		case 103:
+			strcpy(alarma,"Fallo de motor de orientacion");
+			strcpy(accion,": Reiniciando propulsores de orientacion");
+			break;
+
+		case 104:
+			strcpy(alarma,"Autodestruccion manual");
+			strcpy(accion,": Iniciando autodestruccion");
+			break;
+
+		default:
+			strcpy(alarma,"Sin novedades");
+			memset(accion,0,50);
+		}
+
+		switch (pointer[2])
+		{
+		case 0:
+			strcpy(inclinacionX,"Propulsores: off;");
+			break;
+		
+		default:
+			strcpy(inclinacionX,"Propulsores: on;");
+			break;
+		}
+
+		switch (pointer[3])
+		{
+		case 0:
+			strcpy(inclinacionY,"Propulsores: off;");
+			break;
+		
+		default:
+			strcpy(inclinacionY,"Propulsores: on;");
+			break;
+		}
+
+		if(pointer[0]<100){
+			strcpy(distancia,"Aterrizando");
+		}
+
+		printf("Distancia: %d m; %s|Combustible: %d%%|%s θ1: %d°|%s θ2: %d°|%s (codigo %d)%s\n",
+		pointer[0],distancia,pointer[1],inclinacionX,pointer[2],inclinacionY,pointer[3],alarma,pointer[4],accion);
 	}
 
 	return 0;
