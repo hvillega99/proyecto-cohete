@@ -26,7 +26,9 @@ int shmid[NUM], values[NUM];
 
 int propulsor = 0, propulsorX = 0, propulsorY = 0;
 
-sem_t mtpx, mtpy, flags[NUM];
+float combustibleAux = 100.0;
+
+sem_t mtpx, mtpy, flags[NUM], mtcAux;
 
 pthread_t tidDistancia, tidCombustible, tidPropulsorX, tidPropulsorY, tidAlarma;
 
@@ -76,6 +78,7 @@ int main(int argc, char **argv){
 
     sem_init(&mtpx,0,1);
     sem_init(&mtpy,0,1);
+    sem_init(&mtcAux,0,1);
 
     for(int i=0;i<5;i++){
         sem_init(&flags[i],0,1);
@@ -220,7 +223,11 @@ void* controlDistancia(){
         sem_wait(&flags[0]);
         values[0] = h;
         sem_post(&flags[0]);
+
+        if(h == 0){break;}
     }
+
+    terminar();
 }
 
 void* controlCombustible(){
@@ -244,13 +251,18 @@ void* controlPropulsorX(){
             sem_wait(&mtpx);
             propulsorX = 1;
             sem_post(&mtpx);
-            sleep(2);
 
+            sleep(1);
             if(inclinacion < 0){
                 inclinacion++;
             }else if(inclinacion > 0){
                 inclinacion--;
             }
+
+            sem_wait(&mtcAux);
+            combustibleAux--;
+            sem_post(&mtcAux);
+
             *giro1 = inclinacion;
 
         }else{
@@ -279,13 +291,17 @@ void* controlPropulsorY(){
             propulsorY = 1;
             sem_post(&mtpy);
 
-            sleep(2);
+            sleep(1);
 
             if(inclinacion < 0){
                 inclinacion++;
             }else if(inclinacion > 0){
                 inclinacion--;
             }
+
+            sem_wait(&mtcAux);
+            combustibleAux--;
+            sem_post(&mtcAux);
 
             *giro2 = inclinacion;
             
@@ -304,17 +320,31 @@ void* controlPropulsorY(){
 }
 
 void* controlAlarma(){
-
+    int alarm = 0;
     while(1){
+        alarm = *alarma;
         sem_wait(&flags[4]);
-        values[4] = *alarma;
+        values[4] = alarm;
         sem_post(&flags[4]);
+
+        if(alarm == 104){break;}
     }
+    int counter = 5;
+    while(counter > 0){
+        sleep(1);
+        sem_wait(&flags[4]);
+        values[4] = counter;
+        sem_post(&flags[4]);
+        
+        counter--;
+    }
+    sleep(1);
+    terminar();
     
 }
 
 void terminar(){
-	printf("\nFinalizando...\n");
+	printf("\nPrograma de control finalizado...\n");
     for (int i=0;i<NUM;i++)
 	    close(shmid[i]);
 	exit(0);

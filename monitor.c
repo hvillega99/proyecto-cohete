@@ -21,7 +21,7 @@ int clientfd;
 
 int open_clientfd(char *hostname, char *port);
 void connection_error(int connfd);
-void catch();
+void finalizar();
 
 int main(int argc, char **argv)
 {
@@ -55,17 +55,16 @@ int main(int argc, char **argv)
 
 	printf("Conectado exitosamente a %s en el puerto %s.\nPresione ctrl + c para finalizar\n", hostname, port);
 
-	signal(SIGINT, &catch);
+	signal(SIGINT, &finalizar);
 
 	char alarma[32] = {0}, accion[50] = {0}, inclinacionX[52] = {0}, 
-	inclinacionY[52] = {0}, distancia[16] = {0};
-	int pointer[] = {0,0,0,0,0};
+	inclinacionY[52] = {0}, distancia[16] = {0}, propulsor[16] = "Propulsor: on";
+	int pointer[] = {0,0,0,0,0}, flag = 0;
 
 	while(1){
 	
 		for(int i=0;i<5;i++){
-			read(clientfd, &pointer[i], sizeof(int)); //Lee respuesta del servidor
-			
+			read(clientfd, &pointer[i], sizeof(int)); //Lee respuesta del servidor		
 		}
 		
 		switch (pointer[4])
@@ -73,15 +72,11 @@ int main(int argc, char **argv)
 		case 101:
 			strcpy(alarma,"Fallo general");
 			strcpy(accion,": Reiniciando propulsores");
-			//*alarma = "Fallo general";
-			//*accion = ": Reiniciando propulsores";
 			break;
 		
 		case 102:
 			strcpy(alarma,"Fallo de motor principal");
 			strcpy(accion,": Reiniciando propulsor principal");
-			//*alarma = "Fallo de motor principal";
-			//*accion = ": Reiniciando propulsor principal";
 			break;
 
 		case 103:
@@ -92,6 +87,7 @@ int main(int argc, char **argv)
 		case 104:
 			strcpy(alarma,"Autodestruccion manual");
 			strcpy(accion,": Iniciando autodestruccion");
+			flag = 2;
 			break;
 
 		default:
@@ -124,12 +120,35 @@ int main(int argc, char **argv)
 		if(pointer[0]<100){
 			strcpy(distancia,"Aterrizando");
 		}
+		
+		if(pointer[0] == 1){
+			strcpy(propulsor,"Propulsor: off");
+			flag = 1;
+		}
 
-		printf("Distancia: %d m; %s|Combustible: %d%%|%s θ1: %d°|%s θ2: %d°|%s (codigo %d)%s\n",
-		pointer[0],distancia,pointer[1],inclinacionX,pointer[2],inclinacionY,pointer[3],alarma,pointer[4],accion);
+		printf("%s; Altura: %d m; %s|Combustible: %d%%|%s θ1: %d°|%s θ2: %d°|%s (%d)%s\n",
+		propulsor,pointer[0],distancia,pointer[1],inclinacionX,pointer[2],inclinacionY,pointer[3],alarma,pointer[4],accion);
+		if(flag != 0){break;}
+		//if(pointer[0] == 1 || pointer[4] == 104){break;}
 	}
 
-	return 0;
+	if(flag == 1){
+		printf("\n¡Aterrizaje exitoso!\n");
+	}else{
+		while(1){
+			for(int i=0;i<5;i++){
+				read(clientfd, &pointer[i], sizeof(int)); //Lee respuesta del servidor		
+			}
+			printf("Autodestrucción en: %d\n", pointer[4]);
+			if(pointer[4] == 1){
+				sleep(1);
+				break;
+			}
+		}
+		printf("\n¡Cohete destruido!\n");
+	}
+
+	finalizar();
 }
 
 int open_clientfd(char *hostname, char *port) {
@@ -165,7 +184,7 @@ void connection_error(int connfd)
 	exit(-1);
 }
 
-void catch(){
+void finalizar(){
 	close(clientfd);
 	printf("\nDesconectando...\n");
 	exit(0);
