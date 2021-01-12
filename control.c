@@ -26,6 +26,16 @@ int shmid[NUM], values[NUM];
 
 int propulsor = 0, propulsorX = 0, propulsorY = 0;
 
+/*
+
+Propulsor:
+
+0 -> normal, -1 de combustible por segundo
+1 -> acelarando, -5 de combustible
+2 -> desacelerando, -0.5 de combustible por segundo
+
+*/
+
 float combustibleAux = 100.0;
 
 sem_t mtpx, mtpy, flags[NUM], mtcAux;
@@ -215,14 +225,64 @@ int inicializar_memoria_compartida(void){
 
 void* controlDistancia(){
     
-    int h = 0;
+    int h = 0, px, py, up = 1;
     while(1){
         
         h = *distancia;
 
-        sem_wait(&flags[0]);
-        values[0] = h;
-        sem_post(&flags[0]);
+        sem_wait(&mtpx);
+        px = propulsorX;
+        sem_post(&mtpx);
+        
+        sem_wait(&mtpy);
+        py = propulsorY;
+        sem_post(&mtpy);
+
+        if(px==1 || py==1){
+            propulsor = 2; //el propulsor desacelera
+            int aux = 0;
+            while(px==1 || py==1){
+
+                sleep(1);
+                aux++;
+
+                if(aux == 2){
+                    sem_wait(&flags[0]);
+                    values[0]--;
+                    h = values[0];
+                    sem_post(&flags[0]);
+                    aux = 0;
+                }
+                
+                sem_wait(&mtpx);
+                px = propulsorX;
+                sem_post(&mtpx);
+        
+                sem_wait(&mtpy);
+                py = propulsorY;
+                sem_post(&mtpy);
+            }
+
+            if(h <= 5){up = 0;}
+            *distancia = h;
+        }
+
+        if((up == 0) && (px ==0) && (py == 0)){
+            propulsor = 1; //el propulsor acelera
+            for(int i=0; i<5; i++){
+                sleep(1);
+                sem_wait(&flags[0]);
+                values[0]+=6;
+                h = values[0];
+                sem_post(&flags[0]);
+            }
+            *distancia = h;
+        }else{
+            propulsor = 0; //propulsor en modo normal
+            sem_wait(&flags[0]);
+            values[0] = h;
+            sem_post(&flags[0]);
+        }
 
         if(h == 0){break;}
     }
