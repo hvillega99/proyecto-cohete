@@ -22,7 +22,7 @@
 #define SHM_ADDR  233
 
 int *param[NUM], *distancia, *nivel, *giro1, *giro2, *alarma;
-int shmid[NUM], values[NUM]; 
+int shmid[NUM], values[6]; 
 
 int propulsor = 0, propulsorX = 0, propulsorY = 0;
 
@@ -38,7 +38,7 @@ Propulsor:
 
 float combustibleAux = 100.0;
 
-sem_t mtpx, mtpy, flags[NUM], mtcAux;
+sem_t mtpx, mtpy, flags[6], mtcAux;
 
 pthread_t tidDistancia, tidCombustible, tidPropulsorX, tidPropulsorY, tidAlarma;
 
@@ -90,7 +90,7 @@ int main(int argc, char **argv){
     sem_init(&mtpy,0,1);
     sem_init(&mtcAux,0,1);
 
-    for(int i=0;i<5;i++){
+    for(int i=0;i<6;i++){
         sem_init(&flags[i],0,1);
     }
 
@@ -177,7 +177,7 @@ void atender_cliente(int connfd){
    
     while(1){ //escribo datos en el socket
        
-        for(int i=0;i<5;i++){
+        for(int i=0;i<6;i++){
 
             sem_wait(&flags[i]);
             n = write(connfd, &values[i], sizeof(int));
@@ -239,7 +239,10 @@ void* controlDistancia(){
         sem_post(&mtpy);
 
         if(px==1 || py==1){
-            propulsor = 2; //el propulsor desacelera
+            sem_wait(&flags[5]);
+            values[5] = 2; //el propulsor desacelera
+            sem_post(&flags[5]);
+
             int aux = 0;
             while(px==1 || py==1){
 
@@ -268,17 +271,27 @@ void* controlDistancia(){
         }
 
         if((up == 0) && (px ==0) && (py == 0)){
-            propulsor = 1; //el propulsor acelera
+            sem_wait(&flags[5]);
+            values[5] = 1; //el propulsor acelera
+            sem_post(&flags[5]);
+
             for(int i=0; i<5; i++){
                 sleep(1);
+
                 sem_wait(&flags[0]);
                 values[0]+=6;
                 h = values[0];
                 sem_post(&flags[0]);
+
+                *distancia = h;
             }
-            *distancia = h;
+            
+            up = 1;
         }else{
-            propulsor = 0; //propulsor en modo normal
+            sem_wait(&flags[5]);
+            values[5] = 0; //propulsor en modo normal
+            sem_post(&flags[5]);
+
             sem_wait(&flags[0]);
             values[0] = h;
             sem_post(&flags[0]);
@@ -389,6 +402,12 @@ void* controlAlarma(){
 
         if(alarm == 104){break;}
     }
+
+    pthread_cancel(tidDistancia);
+    pthread_cancel(tidPropulsorX);
+    pthread_cancel(tidPropulsorY);
+    pthread_cancel(tidCombustible);
+
     int counter = 5;
     while(counter > 0){
         sleep(1);

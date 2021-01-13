@@ -59,11 +59,11 @@ int main(int argc, char **argv)
 
 	char alarma[32] = {0}, accion[50] = {0}, inclinacionX[52] = {0}, 
 	inclinacionY[52] = {0}, distancia[16] = {0}, propulsor[16] = "Propulsor: on";
-	int pointer[] = {0,0,0,0,0}, flag = 0;
+	int pointer[] = {0,0,0,0,0,0}, flag = 0;
 
 	while(1){
 	
-		for(int i=0;i<5;i++){
+		for(int i=0;i<6;i++){
 			read(clientfd, &pointer[i], sizeof(int)); //Lee respuesta del servidor		
 		}
 		
@@ -114,6 +114,19 @@ int main(int argc, char **argv)
 		
 		default:
 			strcpy(inclinacionY,"Propulsores: on;");
+			break;
+		}
+
+		switch (pointer[5])
+		{
+		case 0:
+			strcpy(propulsor,"Propulsor: on");
+			break;
+		case 1:
+			strcpy(propulsor,"Acelerando");
+			break;
+		case 2:
+			strcpy(propulsor,"Desacelerando");
 			break;
 		}
 
