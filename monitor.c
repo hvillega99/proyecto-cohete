@@ -59,14 +59,17 @@ int main(int argc, char **argv)
 
 	char alarma[32] = {0}, accion[50] = {0}, inclinacionX[52] = {0}, 
 	inclinacionY[52] = {0}, distancia[16] = {0}, propulsor[16] = "Propulsor: on";
-	int pointer[] = {0,0,0,0,0,0}, flag = 0;
+	int pointer[] = {0,0,0,0,0}, flag = 0;
+	float nivel;
 
 	while(1){
 	
-		for(int i=0;i<6;i++){
+		for(int i=0;i<5;i++){
 			read(clientfd, &pointer[i], sizeof(int)); //Lee respuesta del servidor		
 		}
-		
+
+		read(clientfd, &nivel, sizeof(int));
+
 		switch (pointer[4])
 		{
 		case 101:
@@ -89,7 +92,6 @@ int main(int argc, char **argv)
 			strcpy(accion,": Iniciando autodestruccion");
 			flag = 2;
 			break;
-
 		default:
 			strcpy(alarma,"Sin novedades");
 			memset(accion,0,50);
@@ -113,11 +115,11 @@ int main(int argc, char **argv)
 			break;
 		
 		default:
-			strcpy(inclinacionY,"Propulsores: on;");
+			if(pointer[1]!=0){strcpy(inclinacionY,"Propulsores: on;");}
 			break;
 		}
 
-		switch (pointer[5])
+		switch (pointer[1])
 		{
 		case 0:
 			strcpy(propulsor,"Propulsor: on");
@@ -139,8 +141,8 @@ int main(int argc, char **argv)
 			flag = 1;
 		}
 
-		printf("%s; Altura: %d m; %s|Combustible: %d%%|%s θ1: %d°|%s θ2: %d°|%s (%d)%s\n",
-		propulsor,pointer[0],distancia,pointer[1],inclinacionX,pointer[2],inclinacionY,pointer[3],alarma,pointer[4],accion);
+		printf("%s; Altura: %d m; %s|Combustible: %.2f%%|%s θ1: %d°|%s θ2: %d°|%s (%d)%s\n",
+		propulsor,pointer[0],distancia,nivel,inclinacionX,pointer[2],inclinacionY,pointer[3],alarma,pointer[4],accion);
 		if(flag != 0){break;}
 		//if(pointer[0] == 1 || pointer[4] == 104){break;}
 	}
@@ -159,6 +161,7 @@ int main(int argc, char **argv)
 			}
 		}
 		printf("\n¡Cohete destruido!\n");
+		if(nivel<10.0){printf("Combustible insuficiente\n");}
 	}
 
 	finalizar();

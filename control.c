@@ -22,23 +22,13 @@
 #define SHM_ADDR  233
 
 int *param[NUM], *distancia, *nivel, *giro1, *giro2, *alarma;
-int shmid[NUM], values[6]; 
+int shmid[NUM], values[NUM]; 
 
-int propulsor = 0, propulsorX = 0, propulsorY = 0;
-
-/*
-
-Propulsor:
-
-0 -> normal, -1 de combustible por segundo
-1 -> acelarando, -5 de combustible
-2 -> desacelerando, -0.5 de combustible por segundo
-
-*/
+int propulsorX = 0, propulsorY = 0, boom = 0, up = 1;
 
 float combustibleAux = 100.0;
 
-sem_t mtpx, mtpy, flags[6], mtcAux;
+sem_t mtpx, mtpy, flags[NUM], mtxCombustible;
 
 pthread_t tidDistancia, tidCombustible, tidPropulsorX, tidPropulsorY, tidAlarma;
 
@@ -88,9 +78,9 @@ int main(int argc, char **argv){
 
     sem_init(&mtpx,0,1);
     sem_init(&mtpy,0,1);
-    sem_init(&mtcAux,0,1);
+    sem_init(&mtxCombustible,0,1);
 
-    for(int i=0;i<6;i++){
+    for(int i=0;i<5;i++){
         sem_init(&flags[i],0,1);
     }
 
@@ -177,7 +167,7 @@ void atender_cliente(int connfd){
    
     while(1){ //escribo datos en el socket
        
-        for(int i=0;i<6;i++){
+        for(int i=0;i<5;i++){
 
             sem_wait(&flags[i]);
             n = write(connfd, &values[i], sizeof(int));
@@ -186,6 +176,10 @@ void atender_cliente(int connfd){
             if(n <= 0)
                 break;
         }  
+
+        sem_wait(&mtxCombustible);
+        n = write(connfd, &combustibleAux, sizeof(int));
+        sem_post(&mtxCombustible);
 
         if(n <= 0){
             return;
@@ -225,7 +219,7 @@ int inicializar_memoria_compartida(void){
 
 void* controlDistancia(){
     
-    int h = 0, px, py, up = 1;
+    int h = 0, px, py;
     while(1){
         
         h = *distancia;
@@ -238,10 +232,12 @@ void* controlDistancia(){
         py = propulsorY;
         sem_post(&mtpy);
 
-        if(px==1 || py==1){
-            sem_wait(&flags[5]);
-            values[5] = 2; //el propulsor desacelera
-            sem_post(&flags[5]);
+        if(h <= 5){up = 0;}
+
+        if((px==1 || py==1) && up!=0){
+            sem_wait(&flags[1]);
+            values[1] = 2; //el propulsor desacelera
+            sem_post(&flags[1]);
 
             int aux = 0;
             while(px==1 || py==1){
@@ -256,6 +252,10 @@ void* controlDistancia(){
                     sem_post(&flags[0]);
                     aux = 0;
                 }
+
+                sem_wait(&mtxCombustible);
+                combustibleAux -= 0.5;
+                sem_post(&mtxCombustible);
                 
                 sem_wait(&mtpx);
                 px = propulsorX;
@@ -265,15 +265,13 @@ void* controlDistancia(){
                 py = propulsorY;
                 sem_post(&mtpy);
             }
-
-            if(h <= 5){up = 0;}
             *distancia = h;
         }
 
-        if((up == 0) && (px ==0) && (py == 0)){
-            sem_wait(&flags[5]);
-            values[5] = 1; //el propulsor acelera
-            sem_post(&flags[5]);
+        if((up == 0) && (px == 1) && (py == 1)){
+            sem_wait(&flags[1]);
+            values[1] = 1;  //el propulsor acelera
+            sem_post(&flags[1]);
 
             for(int i=0; i<5; i++){
                 sleep(1);
@@ -284,17 +282,27 @@ void* controlDistancia(){
                 sem_post(&flags[0]);
 
                 *distancia = h;
+
+                sem_wait(&mtxCombustible);
+                combustibleAux --;
+                sem_post(&mtxCombustible);
             }
             
             up = 1;
         }else{
-            sem_wait(&flags[5]);
-            values[5] = 0; //propulsor en modo normal
-            sem_post(&flags[5]);
+            sem_wait(&flags[1]);
+            values[1] = 0; //propulsor en modo normal
+            sem_post(&flags[1]);
 
             sem_wait(&flags[0]);
             values[0] = h;
             sem_post(&flags[0]);
+            
+            sleep(1);
+            sem_wait(&mtxCombustible);
+            combustibleAux --;
+            sem_post(&mtxCombustible);
+
         }
 
         if(h == 0){break;}
@@ -305,10 +313,28 @@ void* controlDistancia(){
 
 void* controlCombustible(){
 
+    float n = 0.0;
+    int px, py, h;
     while(1){
-        sem_wait(&flags[1]);
-        values[1] = *nivel;  
-        sem_post(&flags[1]);      
+        sem_wait(&mtxCombustible);
+        n = combustibleAux;
+        sem_post(&mtxCombustible);
+
+        sem_wait(&mtpx);
+        px = propulsorX;
+        sem_post(&mtpx);
+        
+        sem_wait(&mtpy);
+        py = propulsorY;
+        sem_post(&mtpy);
+
+        sem_wait(&flags[0]);
+        h = values[0];
+        sem_post(&flags[0]);
+
+        if((n<10.0) && ((px==1) || (py==1) || (h>10))){
+            boom = 1;
+        }      
     }
     
 }
@@ -325,18 +351,21 @@ void* controlPropulsorX(){
             propulsorX = 1;
             sem_post(&mtpx);
 
-            sleep(1);
-            if(inclinacion < 0){
-                inclinacion++;
-            }else if(inclinacion > 0){
-                inclinacion--;
+            if(up!=0){
+                sleep(1);
+                if(inclinacion < 0){
+                    inclinacion++;
+                }else if(inclinacion > 0){
+                    inclinacion--;
+                }
+
+                sem_wait(&mtxCombustible);
+                combustibleAux--;
+                sem_post(&mtxCombustible);
+
+                *giro1 = inclinacion;
             }
 
-            sem_wait(&mtcAux);
-            combustibleAux--;
-            sem_post(&mtcAux);
-
-            *giro1 = inclinacion;
 
         }else{
             if(propulsorX == 1){
@@ -364,19 +393,21 @@ void* controlPropulsorY(){
             propulsorY = 1;
             sem_post(&mtpy);
 
-            sleep(1);
+            if(up!=0){
+                sleep(1);
+                if(inclinacion < 0){
+                    inclinacion++;
+                }else if(inclinacion > 0){
+                    inclinacion--;
+                }
 
-            if(inclinacion < 0){
-                inclinacion++;
-            }else if(inclinacion > 0){
-                inclinacion--;
+                sem_wait(&mtxCombustible);
+                combustibleAux--;
+                sem_post(&mtxCombustible);
+
+                *giro2 = inclinacion;
             }
 
-            sem_wait(&mtcAux);
-            combustibleAux--;
-            sem_post(&mtcAux);
-
-            *giro2 = inclinacion;
             
         }else{
             if(propulsorY == 1){
@@ -396,6 +427,9 @@ void* controlAlarma(){
     int alarm = 0;
     while(1){
         alarm = *alarma;
+
+        if(boom == 1){alarm = 104;}
+
         sem_wait(&flags[4]);
         values[4] = alarm;
         sem_post(&flags[4]);
